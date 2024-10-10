@@ -69,22 +69,6 @@ class Resource(Base):
     )
 
 
-class DiscussionGroup(Base):
-    __tablename__ = 'discussion_groups'
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    group_name = Column(String(255), unique=True, nullable=False)
-    description = Column(String)
-    link = Column(String, nullable=False)
-    created_at = Column(TIMESTAMP, server_default="CURRENT_TIMESTAMP")
-
-    members = relationship(
-        'User',
-        secondary=user_groups,
-        back_populates='groups'
-    )
-
-
 # Создание SessionLocal для использования в других модулях
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
