@@ -8,17 +8,23 @@ from telegram.ext import (
     filters
 )
 from telegram.constants import ParseMode
-import openai
 import os
 from dotenv import load_dotenv
-from models import SessionLocal, User, Resource, DiscussionGroup
+from models import SessionLocal, User, Resource
+import requests
+import uuid
+from datetime import datetime
+import urllib3
+
+# Подавление предупреждений о небезопасных соединениях
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Загрузка переменных окружения
 load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-
-openai.api_key = OPENAI_API_KEY  # Установка API ключа
+GIGACHAT_AUTHORIZATION_KEY = os.getenv('GIGACHAT_AUTHORIZATION_KEY')
+GIGACHAT_CLIENT_ID = os.getenv('GIGACHAT_CLIENT_ID')
+DATABASE_URL = os.getenv('DATABASE_URL')
 
 # Настройка логирования
 logging.basicConfig(
@@ -27,15 +33,81 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+class GigaChatAPI:
+    def __init__(self, authorization_key):
+        self.authorization_key = authorization_key
+        self.access_token = None
+        self.token_expiry = datetime.utcnow()
+
+    def get_access_token(self):
+        # Проверяем, истёк ли токен или отсутствует
+        if self.access_token is None or datetime.utcnow() >= self.token_expiry:
+            self.request_access_token()
+        return self.access_token
+
+    def request_access_token(self):
+        url = 'https://ngw.devices.sberbank.ru:9443/api/v2/oauth'
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json',
+            'Authorization': f'Basic {self.authorization_key}',
+            'RqUID': str(uuid.uuid4())
+        }
+        data = {
+            'scope': 'GIGACHAT_API_PERS'
+        }
+        try:
+            response = requests.post(url, headers=headers, data=data, verify=False)
+            response.raise_for_status()
+            token_info = response.json()
+            self.access_token = token_info['access_token']
+            # Преобразуем expires_at из миллисекунд в datetime
+            self.token_expiry = datetime.utcfromtimestamp(token_info['expires_at'] / 1000)
+            logger.info("Access token получен успешно.")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Ошибка при получении Access Token: {e}")
+            raise
+
+    def send_message(self, user_message):
+        url = 'https://gigachat.devices.sberbank.ru/api/v1/chat/completions'
+        headers = {
+            'Accept': 'application/json',
+            'Authorization': f'Bearer {self.get_access_token()}',
+            'Content-Type': 'application/json',
+            'X-Client-ID': GIGACHAT_CLIENT_ID,
+            'X-Request-ID': str(uuid.uuid4()),
+            'X-Session-ID': str(uuid.uuid4())
+        }
+        payload = {
+            "model": "GigaChat",
+            "messages": [
+                {"role": "system", "content": "Ты умный помощник в учебе."},
+                {"role": "user", "content": user_message}
+            ],
+            "max_tokens": 500,
+            "temperature": 0.7
+        }
+        try:
+            response = requests.post(url, headers=headers, json=payload, verify=False)
+            response.raise_for_status()
+            response_data = response.json()
+            # Извлекаем ответ модели
+            answer = response_data['choices'][0]['message']['content'].strip()
+            return answer
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Ошибка при обращении к GigaChat API: {e}")
+            return "Извините, я не смог обработать ваш запрос в данный момент."
+
+# Инициализация GigaChat API
+giga_chat_api = GigaChatAPI(GIGACHAT_AUTHORIZATION_KEY)
 
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Привет! Я StudyBuddy, твой помощник в учебе с поддержкой искусственного интеллекта.\n"
+        "Привет! Я StudyHomie, твой помощник в учебе с поддержкой искусственного интеллекта.\n\n"
         "Ты можешь задавать мне вопросы или запрашивать учебные материалы по любимым предметам.\n\n"
         "Вот команды, которые ты можешь использовать:\n"
         "/start - Приветственное сообщение\n"
-        "/help - Показать это сообщение помощи\n"
         "/setsubjects - Установить интересующие тебя предметы\n"
         "/resources - Получить учебные материалы\n"
         "Или просто задай свой вопрос, и я постараюсь помочь!"
@@ -59,8 +131,7 @@ async def set_subjects(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user = User(
                 telegram_id=update.effective_user.id,
                 username=update.effective_user.username,
-                subjects=subjects,
-                progress={}
+                subjects=subjects
             )
             db_session.add(user)
         else:
@@ -105,19 +176,10 @@ async def handle_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
     question = update.message.text
     await update.message.reply_text("Дай мне подумать над этим...")
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # Или "gpt-4", если у вас есть доступ
-            messages=[
-                {"role": "system", "content": "Ты умный помощник в учебе."},
-                {"role": "user", "content": question}
-            ],
-            max_tokens=500,
-            temperature=0.7
-        )
-        answer = response['choices'][0]['message']['content'].strip()
+        answer = giga_chat_api.send_message(question)
         await update.message.reply_text(answer)
     except Exception as e:
-        logger.error(f"Ошибка при обращении к OpenAI API: {e}")
+        logger.error(f"Ошибка при обращении к GigaChat API: {e}")
         await update.message.reply_text("Извините, я не смог обработать ваш запрос в данный момент.")
 
 

@@ -3,30 +3,20 @@ from sqlalchemy import (
     Column,
     Integer,
     String,
-    ForeignKey,
     JSON,
     create_engine,
     CheckConstraint,
-    TIMESTAMP,
-    Table,
+    DateTime,
+    text
 )
-from sqlalchemy.orm import relationship, sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker, declarative_base
 from dotenv import load_dotenv
-from datetime import datetime
 
 # Загрузка переменных окружения из .env файла
 load_dotenv()
 DATABASE_URL = os.getenv('DATABASE_URL')
 
 Base = declarative_base()
-
-# Промежуточная таблица для связи пользователей и групп
-user_groups = Table(
-    'user_groups',
-    Base.metadata,
-    Column('user_id', Integer, ForeignKey('users.id'), primary_key=True),
-    Column('group_id', Integer, ForeignKey('discussion_groups.id'), primary_key=True)
-)
 
 
 class User(Base):
@@ -36,18 +26,11 @@ class User(Base):
     telegram_id = Column(Integer, unique=True, nullable=False)
     username = Column(String(255))
     subjects = Column(JSON)  # Список предметов в формате JSON
-    progress = Column(JSON)  # Опционально: информация о прогрессе пользователя
-    created_at = Column(TIMESTAMP, server_default="CURRENT_TIMESTAMP")
+    created_at = Column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
     updated_at = Column(
-        TIMESTAMP,
-        server_default="CURRENT_TIMESTAMP",
-        onupdate="CURRENT_TIMESTAMP"
-    )
-
-    groups = relationship(
-        'DiscussionGroup',
-        secondary=user_groups,
-        back_populates='members'
+        DateTime,
+        server_default=text("CURRENT_TIMESTAMP"),
+        onupdate=text("CURRENT_TIMESTAMP")
     )
 
 
@@ -59,7 +42,7 @@ class Resource(Base):
     type = Column(String(50), nullable=False)
     title = Column(String(255), nullable=False)
     link = Column(String, nullable=False)
-    created_at = Column(TIMESTAMP, server_default="CURRENT_TIMESTAMP")
+    created_at = Column(DateTime, server_default=text("CURRENT_TIMESTAMP"))
 
     __table_args__ = (
         CheckConstraint(
