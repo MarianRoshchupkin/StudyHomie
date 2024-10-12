@@ -1,10 +1,11 @@
 import logging
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     ContextTypes,
     MessageHandler,
+    CallbackQueryHandler,
     filters
 )
 from telegram.constants import ParseMode
@@ -15,6 +16,23 @@ import requests
 import uuid
 from datetime import datetime
 import urllib3
+
+# Список доступных предметов
+AVAILABLE_SUBJECTS = [
+    'Математика',
+    'Физика',
+    'Химия',
+    'Биология',
+    'История',
+    'Литература',
+    'Информатика',
+    'География',
+    'Английский язык',
+    'Русский язык'
+]
+
+# Глобальный словарь для отслеживания выбранных предметов пользователями
+user_subject_selections = {}
 
 # Подавление предупреждений о небезопасных соединениях
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -57,7 +75,7 @@ class GigaChatAPI:
             'scope': 'GIGACHAT_API_PERS'
         }
         try:
-            response = requests.post(url, headers=headers, data=data, verify=False)
+            response = requests.post(url, headers=headers, data=data, verify=False)  # verify=False временно
             response.raise_for_status()
             token_info = response.json()
             self.access_token = token_info['access_token']
@@ -88,7 +106,7 @@ class GigaChatAPI:
             "temperature": 0.7
         }
         try:
-            response = requests.post(url, headers=headers, json=payload, verify=False)
+            response = requests.post(url, headers=headers, json=payload, verify=False)  # verify=False временно
             response.raise_for_status()
             response_data = response.json()
             # Извлекаем ответ модели
@@ -108,43 +126,40 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Ты можешь задавать мне вопросы или запрашивать учебные материалы по любимым предметам.\n\n"
         "Вот команды, которые ты можешь использовать:\n"
         "/start - Приветственное сообщение\n"
+        "/help - Показать это сообщение помощи\n"
         "/setsubjects - Установить интересующие тебя предметы\n"
         "/resources - Получить учебные материалы\n"
         "Или просто задай свой вопрос, и я постараюсь помочь!"
     )
 
+# Команда /help
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    help_text = (
+        "Вот команды, которые ты можешь использовать:\n"
+        "/start - Приветственное сообщение\n"
+        "/help - Показать это сообщение помощи\n"
+        "/setsubjects - Установить интересующие тебя предметы\n"
+        "/resources - Получить учебные материалы\n"
+        "Или просто задай свой вопрос, и я постараюсь помочь!"
+    )
+    await update.message.reply_text(help_text)
 
 # Команда /setsubjects
 async def set_subjects(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_input = ' '.join(context.args)
-    if not user_input:
-        await update.message.reply_text(
-            "Пожалуйста, укажи свои предметы, разделенные запятыми. Пример: /setsubjects Математика, Физика"
-        )
-        return
-    subjects = [subject.strip() for subject in user_input.split(',')]
+    user_id = update.effective_user.id
+    user_subject_selections[user_id] = set()  # Инициализируем пустое множество для выбранных предметов
 
-    db_session = SessionLocal()
-    try:
-        user = db_session.query(User).filter(User.telegram_id == update.effective_user.id).first()
-        if not user:
-            user = User(
-                telegram_id=update.effective_user.id,
-                username=update.effective_user.username,
-                subjects=subjects
-            )
-            db_session.add(user)
-        else:
-            user.subjects = subjects
-        db_session.commit()
-    except Exception as e:
-        logger.error(f"Ошибка при установке предметов: {e}")
-        await update.message.reply_text("Произошла ошибка при установке твоих предметов. Пожалуйста, попробуй снова.")
-    finally:
-        db_session.close()
+    keyboard = []
+    for subject in AVAILABLE_SUBJECTS:
+        keyboard.append([InlineKeyboardButton(subject, callback_data=f"subject_{subject}")])
+    keyboard.append([InlineKeyboardButton("✅ Готово", callback_data="done")])
 
-    await update.message.reply_text(f"Твои предметы установлены: {', '.join(subjects)}")
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
+    await update.message.reply_text(
+        "Пожалуйста, выберите ваши предметы, нажимая на соответствующие кнопки. После выбора нажмите '✅ Готово'.",
+        reply_markup=reply_markup
+    )
 
 # Команда /resources
 async def get_resources(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -170,8 +185,72 @@ async def get_resources(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         db_session.close()
 
+# Обработка Callback Queries
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()  # Подтверждаем получение нажатия
 
-# Обработка вопросов
+    user_id = query.from_user.id
+    data = query.data
+
+    if data.startswith("subject_"):
+        subject = data.split("subject_")[1]
+        if subject in user_subject_selections.get(user_id, set()):
+            user_subject_selections[user_id].remove(subject)
+            # Обновляем кнопку на невыбранную
+            new_text = f"❌ {subject}"
+        else:
+            user_subject_selections.setdefault(user_id, set()).add(subject)
+            # Обновляем кнопку на выбранную
+            new_text = f"✅ {subject}"
+
+        # Перестраиваем клавиатуру с обновлённым статусом кнопок
+        keyboard = []
+        for subj in AVAILABLE_SUBJECTS:
+            if subj in user_subject_selections[user_id]:
+                button_text = f"✅ {subj}"
+            else:
+                button_text = f"❌ {subj}"
+            keyboard.append([InlineKeyboardButton(button_text, callback_data=f"subject_{subj}")])
+        keyboard.append([InlineKeyboardButton("✅ Готово", callback_data="done")])
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.edit_message_text(
+            "Пожалуйста, выберите ваши предметы, нажимая на соответствующие кнопки. После выбора нажмите '✅ Готово'.",
+            reply_markup=reply_markup
+        )
+
+    elif data == "done":
+        selected_subjects = list(user_subject_selections.get(user_id, set()))
+        if not selected_subjects:
+            await query.edit_message_text("Вы не выбрали ни одного предмета. Пожалуйста, попробуйте снова команду /setsubjects.")
+            user_subject_selections.pop(user_id, None)
+            return
+
+        # Сохраняем выбранные предметы в базу данных
+        db_session = SessionLocal()
+        try:
+            user = db_session.query(User).filter(User.telegram_id == user_id).first()
+            if not user:
+                user = User(
+                    telegram_id=user_id,
+                    username=query.from_user.username,
+                    subjects=selected_subjects
+                )
+                db_session.add(user)
+            else:
+                user.subjects = selected_subjects
+            db_session.commit()
+            await query.edit_message_text(f"Твои предметы успешно установлены: {', '.join(selected_subjects)}")
+        except Exception as e:
+            logger.error(f"Ошибка при установке предметов: {e}")
+            await query.edit_message_text("Произошла ошибка при установке твоих предметов. Пожалуйста, попробуй снова.")
+        finally:
+            db_session.close()
+            user_subject_selections.pop(user_id, None)
+
+
 async def handle_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
     question = update.message.text
     await update.message.reply_text("Дай мне подумать над этим...")
@@ -188,15 +267,18 @@ def main():
 
     # Обработчики команд
     application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('help', help_command))
     application.add_handler(CommandHandler('setsubjects', set_subjects))
     application.add_handler(CommandHandler('resources', get_resources))
+
+    # Обработчик Callback Queries
+    application.add_handler(CallbackQueryHandler(button_handler))
 
     # Обработчик сообщений для вопросов
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_question))
 
     # Запуск бота
     application.run_polling()
-
 
 if __name__ == '__main__':
     main()
