@@ -132,6 +132,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Или просто задай свой вопрос, и я постараюсь помочь!"
     )
 
+# Команда /welcome
+async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("Начать", callback_data="start_app")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "Добро пожаловать! Нажмите кнопку ниже, чтобы начать.",
+        reply_markup=reply_markup
+    )
+
 # Команда /help
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
@@ -193,7 +205,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     data = query.data
 
-    if data.startswith("subject_"):
+    if data == "start_app":
+        # Вызываем функцию start
+        await start(update, context)
+    elif data.startswith("subject_"):
         subject = data.split("subject_")[1]
         if subject in user_subject_selections.get(user_id, set()):
             user_subject_selections[user_id].remove(subject)
@@ -267,6 +282,7 @@ def main():
 
     # Обработчики команд
     application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('welcome', welcome))
     application.add_handler(CommandHandler('help', help_command))
     application.add_handler(CommandHandler('setsubjects', set_subjects))
     application.add_handler(CommandHandler('resources', get_resources))
