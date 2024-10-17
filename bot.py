@@ -1,5 +1,5 @@
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -50,6 +50,7 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
 
 class GigaChatAPI:
     def __init__(self, authorization_key):
@@ -119,30 +120,43 @@ class GigaChatAPI:
 # Инициализация GigaChat API
 giga_chat_api = GigaChatAPI(GIGACHAT_AUTHORIZATION_KEY)
 
+
+# Функция для отправки основного меню
+async def send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        ['/help', '/setsubjects'],
+        ['/resources']
+    ]
+    reply_markup = ReplyKeyboardMarkup(
+        keyboard,
+        resize_keyboard=True,
+        one_time_keyboard=False
+    )
+    await update.message.reply_text(
+        "Выберите действие из меню ниже:",
+        reply_markup=reply_markup
+    )
+
+
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Привет! Я StudyHomie, твой помощник в учебе с поддержкой искусственного интеллекта.\n\n"
         "Ты можешь задавать мне вопросы или запрашивать учебные материалы по любимым предметам.\n\n"
-        "Вот команды, которые ты можешь использовать:\n"
-        "/start - Приветственное сообщение\n"
-        "/help - Показать это сообщение помощи\n"
-        "/setsubjects - Установить интересующие тебя предметы\n"
-        "/resources - Получить учебные материалы\n\n"
-        "Или просто задай свой вопрос, и я постараюсь помочь!"
+        "Вот команды, которые ты можешь использовать:",
+        reply_markup=ReplyKeyboardRemove()  # Убираем любые предыдущие клавиатуры
     )
+    await send_main_menu(update, context)
 
-# Команда /welcome
+
+# Команда /welcome (если необходимо)
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("Начать", callback_data="start_app")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
     await update.message.reply_text(
-        "Добро пожаловать! Нажмите кнопку ниже, чтобы начать.",
-        reply_markup=reply_markup
+        "Добро пожаловать! Вот меню для взаимодействия:",
+        reply_markup=ReplyKeyboardRemove()  # Убираем любые предыдущие клавиатуры
     )
+    await send_main_menu(update, context)
+
 
 # Команда /help
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -154,6 +168,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Или просто задай свой вопрос, и я постараюсь помочь!"
     )
     await update.message.reply_text(help_text)
+
 
 # Команда /setsubjects
 async def set_subjects(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -171,6 +186,7 @@ async def set_subjects(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Пожалуйста, выберите ваши предметы, нажимая на соответствующие кнопки. После выбора нажмите '✅ Готово'.",
         reply_markup=reply_markup
     )
+
 
 # Команда /resources
 async def get_resources(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -195,6 +211,7 @@ async def get_resources(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Произошла ошибка при получении материалов. Пожалуйста, попробуй снова.")
     finally:
         db_session.close()
+
 
 # Обработка Callback Queries
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -265,6 +282,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user_subject_selections.pop(user_id, None)
 
 
+# Обработка вопросов к GigaChat
 async def handle_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
     question = update.message.text
     await update.message.reply_text("Дай мне подумать над этим...")
@@ -276,6 +294,24 @@ async def handle_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Извините, я не смог обработать ваш запрос в данный момент.")
 
 
+# Обновленная команда /help для отображения меню после помощи
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    help_text = (
+        "Вот команды, которые ты можешь использовать:\n"
+        "/help - Показать это сообщение помощи\n"
+        "/setsubjects - Установить интересующие тебя предметы\n"
+        "/resources - Получить учебные материалы\n\n"
+        "Или просто задай свой вопрос, и я постараюсь помочь!"
+    )
+    await update.message.reply_text(help_text)
+    await send_main_menu(update, context)
+
+
+# Функция для отправки основного меню при необходимости
+async def main_menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await send_main_menu(update, context)
+
+
 def main():
     application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
 
@@ -285,8 +321,9 @@ def main():
     application.add_handler(CommandHandler('help', help_command))
     application.add_handler(CommandHandler('setsubjects', set_subjects))
     application.add_handler(CommandHandler('resources', get_resources))
+    application.add_handler(CommandHandler('menu', main_menu_command))  # Дополнительная команда для меню
 
-    # Обработчик Callback Queries
+    # Обработчик Callback Queries для Inline кнопок
     application.add_handler(CallbackQueryHandler(button_handler))
 
     # Обработчик сообщений для вопросов
@@ -294,6 +331,7 @@ def main():
 
     # Запуск бота
     application.run_polling()
+
 
 if __name__ == '__main__':
     main()
