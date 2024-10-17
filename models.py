@@ -61,7 +61,6 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # Инициализация базы данных и создание таблиц
 def init_db():
     Base.metadata.create_all(engine)
-    print("Таблицы успешно созданы!")
 
 
 if __name__ == '__main__':
