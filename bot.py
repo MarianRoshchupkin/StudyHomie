@@ -128,7 +128,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/start - Приветственное сообщение\n"
         "/help - Показать это сообщение помощи\n"
         "/setsubjects - Установить интересующие тебя предметы\n"
-        "/resources - Получить учебные материалы\n"
+        "/resources - Получить учебные материалы\n\n"
         "Или просто задай свой вопрос, и я постараюсь помочь!"
     )
 
@@ -148,10 +148,9 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
         "Вот команды, которые ты можешь использовать:\n"
-        "/start - Приветственное сообщение\n"
         "/help - Показать это сообщение помощи\n"
         "/setsubjects - Установить интересующие тебя предметы\n"
-        "/resources - Получить учебные материалы\n"
+        "/resources - Получить учебные материалы\n\n"
         "Или просто задай свой вопрос, и я постараюсь помочь!"
     )
     await update.message.reply_text(help_text)
