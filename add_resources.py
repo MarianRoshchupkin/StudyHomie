@@ -3,6 +3,7 @@ import os
 from models import SessionLocal, Resource, init_db
 from dotenv import load_dotenv
 
+
 def add_resource(subject, type_, title, link):
     db_session = SessionLocal()
     try:
@@ -14,12 +15,11 @@ def add_resource(subject, type_, title, link):
         )
         db_session.add(resource)
         db_session.commit()
-        print(f"Ресурс '{title}' успешно добавлен.")
     except Exception as e:
         db_session.rollback()
-        print(f"Ошибка при добавлении ресурса: {e}")
     finally:
         db_session.close()
+
 
 def main():
     load_dotenv()
@@ -34,6 +34,7 @@ def main():
     args = parser.parse_args()
 
     add_resource(args.subject, args.type, args.title, args.link)
+
 
 if __name__ == '__main__':
     main()
