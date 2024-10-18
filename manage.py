@@ -120,5 +120,30 @@ def downgrade():
         click.echo(f"Ошибка при откате миграции: {e}")
 
 
+@cli.command()
+@click.option('--subject', prompt='Тема ресурса', help='Тема ресурса (например, Математика)')
+@click.option('--type', type=click.Choice(['Article', 'Video', 'Tutorial']), prompt='Тип ресурса', help='Тип ресурса')
+@click.option('--title', prompt='Название ресурса', help='Название ресурса')
+@click.option('--link', prompt='Ссылка на ресурс', help='Ссылка на ресурс')
+def addresource(subject, type, title, link):
+    """
+    Добавляет новый учебный ресурс в базу данных.
+    """
+    click.echo(f"Добавление ресурса: {title}")
+    try:
+        # Вызов скрипта add_resources.py с аргументами
+        subprocess.run([
+            sys.executable,
+            "add_resources.py",
+            "--subject", subject,
+            "--type", type,
+            "--title", title,
+            "--link", link
+        ], check=True)
+        click.echo(f"Ресурс '{title}' успешно добавлен.")
+    except subprocess.CalledProcessError as e:
+        click.echo(f"Ошибка при добавлении ресурса: {e}")
+
+
 if __name__ == '__main__':
     cli()

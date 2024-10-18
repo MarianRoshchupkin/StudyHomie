@@ -15,3 +15,6 @@ status:
 
 downgrade:
 	python manage.py downgrade
+
+addresource:
+	python manage.py addresource
