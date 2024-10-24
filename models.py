@@ -47,7 +47,7 @@ class Resource(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "type IN ('Article', 'Video', 'Tutorial')",
+            "type IN ('Статья', 'Видео', 'Туториал')",
             name='check_resource_type'
         ),
     )
@@ -56,6 +56,15 @@ class Resource(Base):
 # Создание SessionLocal для использования в других модулях
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+# Вспомогательная функция для получения сессии
+def get_session():
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 # Инициализация базы данных и создание таблиц

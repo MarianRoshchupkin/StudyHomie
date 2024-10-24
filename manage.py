@@ -5,9 +5,24 @@ from models import init_db, Base, engine
 from alembic.config import Config
 from alembic import command
 from dotenv import load_dotenv
+import validators
 
 # Загрузка переменных окружения
 load_dotenv()
+
+# Определение доступных предметов
+AVAILABLE_SUBJECTS = [
+    'Математика',
+    'Физика',
+    'Химия',
+    'Биология',
+    'История',
+    'Литература',
+    'Информатика',
+    'География',
+    'Английский язык',
+    'Русский язык'
+]
 
 @click.group()
 def cli():
@@ -121,28 +136,79 @@ def downgrade():
 
 
 @cli.command()
-@click.option('--subject', prompt='Тема ресурса', help='Тема ресурса (например, Математика)')
-@click.option('--type', type=click.Choice(['Article', 'Video', 'Tutorial']), prompt='Тип ресурса', help='Тип ресурса')
-@click.option('--title', prompt='Название ресурса', help='Название ресурса')
+@click.option(
+    '--subject',
+    type=click.IntRange(1, len(AVAILABLE_SUBJECTS)),
+    prompt='Выберите предмет:\n' + '\n'.join([f'{i + 1}. {s}' for i, s in enumerate(AVAILABLE_SUBJECTS)]),
+    help='Номер предмета'
+)
+@click.option(
+    '--type',
+    type=click.IntRange(1, 3),
+    prompt='Тип ресурса (1. Статья, 2. Видео, 3. Туториал)',
+    help='Тип ресурса'
+)
+@click.option('--title', prompt='Название статьи, видео или туториала', help='Название статьи, видео или туториала')
 @click.option('--link', prompt='Ссылка на ресурс', help='Ссылка на ресурс')
 def addresource(subject, type, title, link):
     """
     Добавляет новый учебный ресурс в базу данных.
     """
-    click.echo(f"Добавление ресурса: {title}")
+    click.echo("Добавление нового учебного ресурса.")
     try:
+        # Маппинг чисел на типы ресурсов
+        type_mapping_display = {1: 'Статья', 2: 'Видео', 3: 'Туториал'}
+        type_mapping_internal = {1: 'Article', 2: 'Video', 3: 'Tutorial'}
+
+        type_selected_display = type_mapping_display.get(type)
+        type_selected_internal = type_mapping_internal.get(type)
+
+        if not type_selected_display or not type_selected_internal:
+            raise ValueError("Неверный выбор типа ресурса.")
+
+        # Маппинг числа на предмет
+        subject_selected = AVAILABLE_SUBJECTS[subject - 1]
+
+        # Валидация и обработка переданных параметров
+        subject_selected = subject_selected.strip()
+        if not subject_selected:
+            raise ValueError("Предмет не может быть пустым.")
+
+        title = title.strip()
+        if not title:
+            raise ValueError("Название ресурса не может быть пустым.")
+
+        if not validators.url(link):
+            raise ValueError("Некорректный формат URL.")
+
+        # Подтверждение введённых данных
+        click.echo("\nВы добавляете ресурс со следующими данными:")
+        click.echo(f"Предмет: {subject_selected}")
+        click.echo(f"Тип: {type_selected_display}")
+        click.echo(f"Название: {title}")
+        click.echo(f"Ссылка: {link}")
+
+        confirm = click.confirm("Вы уверены, что хотите добавить этот ресурс?", default=True)
+        if not confirm:
+            click.echo("Добавление ресурса отменено.")
+            sys.exit(0)
+
         # Вызов скрипта add_resources.py с аргументами
         subprocess.run([
             sys.executable,
             "add_resources.py",
-            "--subject", subject,
-            "--type", type,
+            "--subject", subject_selected,
+            "--type", type_selected_internal,  # Передаём английский тип
             "--title", title,
             "--link", link
         ], check=True)
         click.echo(f"Ресурс '{title}' успешно добавлен.")
     except subprocess.CalledProcessError as e:
         click.echo(f"Ошибка при добавлении ресурса: {e}")
+    except ValueError as ve:
+        click.echo(f"Ошибка ввода: {ve}")
+    except Exception as e:
+        click.echo(f"Произошла непредвиденная ошибка: {e}")
 
 
 if __name__ == '__main__':
