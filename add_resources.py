@@ -1,6 +1,11 @@
 import argparse
 from models import Resource, SessionLocal
 import sys
+import traceback
+
+def clean_string(s):
+    return ''.join(c for c in s if not (0xD800 <= ord(c) <= 0xDFFF))
+
 
 def main():
     parser = argparse.ArgumentParser(description='Добавление ресурса в базу данных.')
@@ -23,11 +28,14 @@ def main():
         print("Неверный тип ресурса.")
         sys.exit(1)
 
+    # Очистка названия от некорректных символов
+    cleaned_title = clean_string(args.title)
+
     # Создание нового ресурса
     new_resource = Resource(
         subject=args.subject,
         type=type_russian,  # Сохраняем русский тип
-        title=args.title,
+        title=cleaned_title,
         link=args.link
     )
 
@@ -35,10 +43,11 @@ def main():
         with SessionLocal() as session:
             session.add(new_resource)
             session.commit()
-        print(f"Ресурс '{args.title}' успешно добавлен.")
     except Exception as e:
-        print(f"Ошибка при добавлении ресурса: {e}")
+        print("Произошла ошибка при добавлении ресурса:")
+        traceback.print_exc()
         sys.exit(1)
+
 
 if __name__ == '__main__':
     main()
